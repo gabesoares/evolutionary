@@ -7,9 +7,9 @@ GENERATIONS = 500  # max number of generations
 hidden_neurons = 2  # number of neurons in hidden layer
 input_size = 4  # 4 states as the inputs to the NN
 swarm_size = 10  # number of chromosomes in each population
-Pc = 0.6  # crossover rate
-Pm = 0.1  # mutation rate
-crossed_parents = 10  # number of chromosomes that go through crossover, needs to be even
+w = 0.5  # constant inertia weight (how much to weigh the previous velocity)
+c1 = 1  # cognitive constant
+c2 = 2  # social constant
 
 # need to set up cartpole environment
 
@@ -27,6 +27,7 @@ def main():
     chromosome_pool = generate_swarm()  # initial pool of chromosomes
     best_particle_positions = chromosome_pool
     best_particle_fitnesses = np.zeros(swarm_size)
+    particle_velocities = np.zeros([np.size(chromosome_pool, 0), np.size(chromosome_pool, 1)])
 
     best_swarm_position = best_particle_positions[0][:]
     best_swarm_fitness = [0]
@@ -50,70 +51,18 @@ def main():
                     best_particle_fitnesses[i] = current_fitness[i]
                     best_particle_positions[i][:] = chromosome_pool[i][:]
 
-            # update particle velocity
-
-            #  2. selection
-            r = np.random.uniform(0, 1, swarm_size)  # create list of random numbers for selection
-
-            a = np.array([0])
-            # a.shape = (1, 1)
-            cp_augmented = np.concatenate((a, cp), axis=0)
-            hist, bin_edges = np.histogram(r, cp_augmented)
-            selected_population = []
-            empty = 1
+            # update particle velocities
 
             for i in range(swarm_size):
-                for j in range(hist[i]):
-                    if empty == 1:
-                        selected_population = chromosome_pool[i][:]
-                        empty = 0
-                    else:
-                        selected_population = np.vstack((selected_population, chromosome_pool[i][:]))
+                r1 = np.random.uniform(0, 1)
+                r2 = np.random.uniform(0, 1)
 
-            # might be a good thing to check if keeping the top 4 or 2 works better
+                vel_cognitive = c1 * r1 * (best_particle_positions[i][:] - chromosome_pool[i][:])
+                vel_social = c2 * c2 * (best_swarm_position - chromosome_pool[i][:])
+                particle_velocities[i][:] = w * particle_velocities[i][:] + vel_cognitive + vel_social
 
-            #  3. crossover
-            r = np.random.uniform(0, 1, swarm_size)  # create list of random numbers for crossover
-
-            indices = np.argwhere(r > Pc)
-            parent_count = 0
-            empty = 1;
-            i = 0
-            crossover_pairs = []
-
-            while i < swarm_size:
-                if r[i] < Pc:
-                    # include ith chromosome
-                    if empty == 1:
-                        crossover_pairs = selected_population[i][:]
-                        crossover_pairs.shape = (1, 10)
-                        empty = 0
-                    else:
-                        crossover_pairs = np.vstack((crossover_pairs, selected_population[i][:]))
-
-                    if np.size(crossover_pairs, 0) == crossed_parents:
-                        break  # we have enough parents for crossover
-                i = i + 1
-                if i == (swarm_size) and np.size(crossover_pairs, 0) < crossed_parents:
-                    i = 0  # we don't have enough yet, so restart the loop
-                    #  generate new random number list
-                    r = np.random.uniform(0, 1, population_size)  # create list of random numbers for crossover
-
-            offspring = crossover(crossover_pairs)
-
-            #  4. mutation
-            r = np.random.uniform(0, 1, population_size*(hidden_neurons*input_size + hidden_neurons))
-            offspring.shape = (1, population_size*(hidden_neurons*input_size + hidden_neurons))
-
-            for m in range(np.size(r, 0)):
-                if r[m] < Pm:
-                    random_value = np.random.uniform(-1.0, 1.0, 1)
-                    offspring[0][m] += random_value
-
-            offspring.shape = (population_size, hidden_neurons * input_size + hidden_neurons)
-            #  5. new mating pool finalized
-
-            chromosome_pool = offspring
+            # update particle positions
+            chromosome_pool = chromosome_pool + particle_velocities
 
         for iteration in range(swarm_size):  # episode
             observations = []
@@ -202,23 +151,6 @@ def generate_swarm():  # generates initial population for GA
             swarm = np.vstack((swarm, a))
 
     return swarm
-
-def crossover(crossover_pairs):  # performs crossover on the current population
-    selector = np.random.random_integers(1, swarm_size)  # used to select which parents to crossover from existing population
-    selector = 1
-    offspring = np.zeros([np.size(crossover_pairs, 0), np.size(crossover_pairs, 1)])
-    for i in range(int(crossed_parents/2)):
-        temp = crossover_pairs[2*i][selector:]
-        temp2 = crossover_pairs[2*i+1][selector:]
-
-        offspring[2*i][selector:] = temp2
-        a = 2*i + 1
-        offspring[a][selector:] = temp
-
-    for i in range(np.size(crossover_pairs, 0)):
-        offspring[i][0] = crossover_pairs[i][0]
-
-    return offspring
 
 if __name__ == '__main__':
     main()
